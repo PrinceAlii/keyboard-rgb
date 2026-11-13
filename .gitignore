@@ -1,0 +1,17 @@
+# Rust build output
+/target/
+
+# Local editor and OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local logs and captures
+*.log
+*.pcap
+*.pcapng
+
+# Local worktrees used during development
+/.worktrees/

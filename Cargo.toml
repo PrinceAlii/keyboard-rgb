@@ -1,0 +1,24 @@
+[package]
+name = "rgbd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "Native lighting and device control for AULA F99 and Razer peripherals"
+license = "MIT OR Apache-2.0"
+authors = ["Ali B"]
+repository = "https://github.com/PrinceAlii/keyboard-rgb"
+readme = "README.md"
+keywords = ["rgb", "hid", "keyboard", "mouse", "windows"]
+categories = ["hardware-support", "command-line-utilities"]
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+eframe = "0.37"
+hex = "0.4"
+hidapi = "2.6"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

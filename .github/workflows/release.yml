@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package Windows release
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binaries
+        run: cargo build --release
+
+      - name: Stage and zip release files
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = Join-Path $env:RUNNER_TEMP 'rgbd-release'
+          $zipPath = Join-Path $env:RUNNER_TEMP 'rgbd-release.zip'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+
+          foreach ($binary in @('rgbd.exe', 'rgbctl.exe')) {
+            $binaryPath = Join-Path $env:GITHUB_WORKSPACE "target/release/$binary"
+            if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
+              throw "Required release binary not found: $binaryPath"
+            }
+            Copy-Item -LiteralPath $binaryPath -Destination $stage
+          }
+
+          foreach ($file in @('README.md', 'LICENSE-MIT', 'LICENSE-APACHE')) {
+            $filePath = Join-Path $env:GITHUB_WORKSPACE $file
+            if (Test-Path -LiteralPath $filePath -PathType Leaf) {
+              Copy-Item -LiteralPath $filePath -Destination $stage
+            }
+          }
+
+          $docsPath = Join-Path $env:GITHUB_WORKSPACE 'docs'
+          if (Test-Path -LiteralPath $docsPath -PathType Container) {
+            Copy-Item -LiteralPath $docsPath -Destination $stage -Recurse
+          }
+
+          if (Test-Path -LiteralPath $zipPath) {
+            Remove-Item -LiteralPath $zipPath -Force
+          }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zipPath
+
+          if ($env:GITHUB_REF.StartsWith('refs/tags/')) {
+            $releaseTag = $env:GITHUB_REF.Substring('refs/tags/'.Length)
+          } else {
+            $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+            $releaseTag = "manual-$shortSha"
+          }
+          $safeTag = $releaseTag -replace '[^A-Za-z0-9._-]', '-'
+          $assetPath = Join-Path $env:RUNNER_TEMP "rgbd-$safeTag-windows-x86_64.zip"
+          Move-Item -LiteralPath $zipPath -Destination $assetPath -Force
+          "asset_path=$assetPath" >> $env:GITHUB_OUTPUT
+          "release_tag=$releaseTag" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.package.outputs.release_tag }}
+          RELEASE_ASSET: ${{ steps.package.outputs.asset_path }}
+        shell: pwsh
+        run: |
+          gh release create $env:RELEASE_TAG $env:RELEASE_ASSET `
+            --title $env:RELEASE_TAG `
+            --target $env:GITHUB_SHA `
+            --generate-notes
